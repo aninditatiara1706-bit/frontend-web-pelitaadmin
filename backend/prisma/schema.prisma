@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  KADER
+}
+
+enum JenisKelamin {
+  LAKI_LAKI
+  PEREMPUAN
+}
+
+enum KategoriPeserta {
+  BALITA
+  IBU_HAMIL
+  LANSIA
+}
+
+enum StatusJadwal {
+  MENDATANG
+  BERJALAN
+  SELESAI
+}
+
+enum StatusAntrean {
+  MENUNGGU
+  DIPERIKSA
+  SELESAI
+  BATAL
+}
+
+enum StatusPemeriksaan {
+  SELESAI
+  BELUM_DIPERIKSA
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(KADER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  @@map("users")
+}
+
+model Peserta {
+  id           String           @id @default(cuid())
+  nik          String           @unique @db.Char(16)
+  nama         String
+  tanggalLahir DateTime         @map("tanggal_lahir") @db.Date
+  jenisKelamin JenisKelamin     @map("jenis_kelamin")
+  kategori     KategoriPeserta
+  alamat       String           @db.Text
+  noTelepon    String?          @map("no_telepon") @db.VarChar(20)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  antrean      Antrean[]
+  pemeriksaan  Pemeriksaan[]
+  @@index([nama])
+  @@index([kategori])
+  @@map("peserta")
+}
+
+model JadwalPosyandu {
+  id          String       @id @default(cuid())
+  tanggal     DateTime     @db.DateTime(3)
+  lokasi      String
+  deskripsi   String?      @db.Text
+  status      StatusJadwal @default(MENDATANG)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  antrean     Antrean[]
+  pemeriksaan Pemeriksaan[]
+  @@index([tanggal, status])
+  @@map("jadwal_posyandu")
+}
+
+model Antrean {
+  id        String        @id @default(cuid())
+  noAntrean Int           @map("no_antrean")
+  pesertaId String        @map("peserta_id")
+  jadwalId  String        @map("jadwal_id")
+  status    StatusAntrean @default(MENUNGGU)
+  tanggal   DateTime      @default(now()) @db.DateTime(3)
+  createdAt DateTime      @default(now()) @map("created_at")
+  peserta   Peserta       @relation(fields: [pesertaId], references: [id], onDelete: Restrict)
+  jadwal    JadwalPosyandu @relation(fields: [jadwalId], references: [id], onDelete: Restrict)
+  @@unique([jadwalId, noAntrean])
+  @@unique([jadwalId, pesertaId])
+  @@index([jadwalId, status, noAntrean])
+  @@map("antrean")
+}
+
+model Pemeriksaan {
+  id                 String            @id @default(cuid())
+  pesertaId          String            @map("peserta_id")
+  jadwalId           String            @map("jadwal_id")
+  tanggalPemeriksaan DateTime          @default(now()) @map("tanggal_pemeriksaan") @db.DateTime(3)
+  tinggiBadan        Decimal?          @map("tinggi_badan") @db.Decimal(5, 2)
+  beratBadan         Decimal?          @map("berat_badan") @db.Decimal(5, 2)
+  lingkarKepala      Decimal?          @map("lingkar_kepala") @db.Decimal(5, 2)
+  catatan            String?           @db.Text
+  statusPemeriksaan  StatusPemeriksaan @default(BELUM_DIPERIKSA) @map("status_pemeriksaan")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  peserta            Peserta           @relation(fields: [pesertaId], references: [id], onDelete: Restrict)
+  jadwal             JadwalPosyandu    @relation(fields: [jadwalId], references: [id], onDelete: Restrict)
+  @@unique([pesertaId, jadwalId])
+  @@index([tanggalPemeriksaan, statusPemeriksaan])
+  @@map("pemeriksaan")
+}
