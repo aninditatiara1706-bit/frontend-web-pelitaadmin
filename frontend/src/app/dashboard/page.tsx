@@ -50,8 +50,9 @@ export default function Dashboard() {
   }, [period]);
 
   const today = dateKey(new Date());
-  const todaySchedules = schedules.filter((item) => dateKey(item.tanggal) === today);
-  const nextSchedules = schedules.filter((item) => dateKey(item.tanggal) >= today).slice(0, 4);
+  // Ditambahkan .slice(0, 1) agar hanya menampilkan 1 jadwal saja untuk hari ini
+  const todaySchedules = schedules.filter((item) => dateKey(item.tanggal) === today).slice(0, 1);
+  const nextSchedules = schedules.filter((item) => dateKey(item.tanggal) > today).slice(0, 4);
 
   return (
     <div className="min-h-screen bg-white p-4 font-sans text-gray-800 sm:p-6 lg:p-8">

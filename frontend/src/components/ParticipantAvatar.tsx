@@ -1,4 +1,4 @@
-﻿type ParticipantAvatarProps = {
+type ParticipantAvatarProps = {
   name: string;
   size?: number;
 };

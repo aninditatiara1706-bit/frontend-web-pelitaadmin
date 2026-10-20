@@ -73,7 +73,8 @@ export default function PendaftaranAntreanPage() {
 
   const activeQueues = queues.filter((item) => item.jadwalId === newScheduleId);
   const nextQueue = activeQueues.find((item) => item.status === 'MENUNGGU');
-  const currentQueue = activeQueues.find((item) => item.status === 'DIPERIKSA');
+  const calledQueues = activeQueues.filter((item) => item.status === 'DIPERIKSA');
+  const currentQueue = calledQueues[0];
   const selectedQueue = queues.find((item) => item.id === selectedId);
   const availableStatuses = selectedQueue ? statusTransitions[selectedQueue.status] : [];
 
@@ -155,13 +156,18 @@ export default function PendaftaranAntreanPage() {
           <div className="text-3xl font-extrabold">{nextQueue ? `A-${nextQueue.noAntrean}` : '—'}</div>
         </div>
       </section>
+      {calledQueues.length > 1 && (
+        <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Ada lebih dari satu antrean yang berstatus Dipanggil. Selesaikan pemeriksaan yang sedang berjalan sebelum memanggil antrean berikutnya.
+        </p>
+      )}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Cari nama / nomor antrean" className="w-full max-w-sm rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100" />
         <div className="flex gap-2">
           <button type="button" onClick={() => void loadData()} disabled={isLoading} className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 disabled:opacity-50">Muat ulang</button>
-          <button type="button" disabled={!queues.some((item) => item.status === 'MENUNGGU') || isSaving} onClick={() => nextQueue && void updateStatus(nextQueue.id, 'DIPERIKSA')} className="rounded-xl border-2 border-[#7E3AF2] px-4 py-2.5 text-sm font-bold text-[#7E3AF2] disabled:cursor-not-allowed disabled:opacity-50">
-            Panggil {nextQueue ? `A-${nextQueue.noAntrean}` : ''}
+          <button type="button" disabled={!nextQueue || Boolean(currentQueue) || isSaving} onClick={() => nextQueue && void updateStatus(nextQueue.id, 'DIPERIKSA')} className="rounded-xl border-2 border-[#7E3AF2] px-4 py-2.5 text-sm font-bold text-[#7E3AF2] disabled:cursor-not-allowed disabled:opacity-50">
+            {currentQueue ? `Sedang periksa A-${currentQueue.noAntrean}` : nextQueue ? `Panggil A-${nextQueue.noAntrean}` : 'Tidak ada antrean menunggu'}
           </button>
         </div>
       </div>

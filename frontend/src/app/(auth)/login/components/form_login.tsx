@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiRequest, ApiUser } from '../../lib/api';
+import { apiRequest, ApiUser } from '../../../../lib/api';
 import Image from 'next/image';
 
 export default function LoginPage() {

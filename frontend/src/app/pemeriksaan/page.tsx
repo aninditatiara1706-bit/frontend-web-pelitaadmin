@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Save } from 'lucide-react';
-import ParticipantAvatar from '../../../components/ParticipantAvatar';
-import { apiRequest, Examination, QueueRecord, displayCategory } from '../../../lib/api';
+import ParticipantAvatar from '../../components/ParticipantAvatar';
+import { apiRequest, Examination, QueueRecord, displayCategory } from '../../lib/api';
 
 type ExaminationForm = { weight: string; height: string; headCircumference: string; notes: string };
 

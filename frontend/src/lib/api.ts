@@ -75,15 +75,44 @@ const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') ??
   'http://localhost:4000/api';
 
+// Mengambil token JWT yang tersimpan
+function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('jwt_token');
+}
+
+// Menyimpan token JWT
+function saveToken(token: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('jwt_token', token);
+  }
+}
+
+// Menghapus token JWT saat logout
+export function removeToken(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('jwt_token');
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
   let response: Response;
   const headers = new Headers(options.headers);
+
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
+
+  // Mengirim token JWT pada request berikutnya
+  const token = getToken();
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
       ...options,
@@ -91,18 +120,36 @@ export async function apiRequest<T>(
       headers,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+
     throw new Error(
       `Tidak dapat terhubung ke backend (${apiBaseUrl}). Pastikan server backend berjalan.`,
     );
   }
 
   const result = (await response.json().catch(() => null)) as
-    | ApiResponse<T> & { details?: Array<{ message: string }> }
+    | (ApiResponse<T> & {
+        token?: string;
+        data?: T & { token?: string };
+        details?: Array<{ message: string }>;
+      })
     | null;
+
   if (!response.ok || !result?.success) {
     const detail = result?.details?.map((item) => item.message).join(', ');
-    throw new ApiError(detail || result?.message || 'Permintaan gagal', response.status);
+    throw new ApiError(
+      detail || result?.message || 'Permintaan gagal',
+      response.status,
+    );
+  }
+
+  // Menyimpan token jika backend mengirimkannya
+  const receivedToken = result.token ?? result.data?.token;
+
+  if (typeof receivedToken === 'string' && receivedToken.length > 0) {
+    saveToken(receivedToken);
   }
 
   return result;
