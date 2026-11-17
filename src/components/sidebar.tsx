@@ -12,6 +12,7 @@ import {
   Calendar,
   ClipboardList,
   FileText,
+  ShieldCheck,
   LogOut,
   X,
 } from 'lucide-react';
@@ -44,7 +45,15 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({
+  userRole,
+  userName,
+  userEmail,
+}: {
+  userRole?: 'ADMIN' | 'KADER';
+  userName?: string;
+  userEmail?: string;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -64,10 +73,18 @@ export default function Sidebar() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isMobileMenuOpen]);
 
+  const visibleMenuItems = userRole === 'ADMIN'
+    ? [
+      ...menuItems.map((item) => item.name === 'Rekapitulasi' ? { ...item, href: '/super-admin/rekapitulasi' } : item),
+      { name: 'Kelola Akun', href: '/super-admin', icon: ShieldCheck },
+    ]
+    : menuItems;
+  const homeHref = userRole === 'ADMIN' ? '/super-admin' : '/dashboard';
+
   const renderMenuItems = (mobile = false) =>
-    menuItems.map((item) => {
+    visibleMenuItems.map((item) => {
       const IconComponent = item.icon;
-      const isActive = pathname === item.href;
+      const isActive = pathname === item.href || (item.href !== '/super-admin' && pathname.startsWith(`${item.href}/`));
 
       return (
         <Link
@@ -115,9 +132,9 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="hidden w-64 shrink-0 flex-col bg-purple-600 text-white shadow-xl md:sticky md:top-0 md:flex md:h-screen">
+      <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto overscroll-contain bg-purple-600 text-white shadow-xl md:sticky md:top-0 md:flex md:h-screen md:self-start">
         <div className="flex items-center px-6 pb-8 pt-7">
-          <Link href="/dashboard" aria-label="Pelita Admin - Dashboard" className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-4 focus-visible:ring-offset-purple-600">
+          <Link href={homeHref} aria-label="Pelita Admin - Dashboard" className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-4 focus-visible:ring-offset-purple-600">
             <Brand />
           </Link>
         </div>
@@ -133,13 +150,22 @@ export default function Sidebar() {
 
         <div className="mt-auto px-4 pb-5 pt-6">
           <div className="mb-3 border-t border-white/15" />
+          {userRole === 'ADMIN' && (
+            <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-3 py-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-white"><ShieldCheck size={18} /></span>
+              <span className="min-w-0">
+                <strong className="block truncate text-xs">{userName ?? 'Super Admin'}</strong>
+                <span className="block truncate text-[10px] text-purple-200">{userEmail ?? 'Administrator PELITA'}</span>
+              </span>
+            </div>
+          )}
           {logoutLink()}
         </div>
       </aside>
 
       <header className="sticky top-0 z-30 border-b border-purple-500/70 bg-purple-600 text-white shadow-md md:hidden">
         <div className="flex h-16 items-center justify-between px-4">
-          <Link href="/dashboard" aria-label="Pelita Admin - Dashboard" className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-white">
+          <Link href={homeHref} aria-label="Pelita Admin - Dashboard" className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-white">
             <Brand compact />
           </Link>
           <button
@@ -170,11 +196,11 @@ export default function Sidebar() {
         <aside
           id="mobile-sidebar"
           aria-label="Menu navigasi mobile"
-          className={`relative flex h-full w-[min(19rem,86vw)] flex-col bg-purple-600 text-white shadow-2xl transition-[translate] duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          className={`relative flex h-full w-[min(19rem,86vw)] flex-col overflow-y-auto overscroll-contain bg-purple-600 text-white shadow-2xl transition-[translate] duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
         >
           <div className="flex items-center justify-between border-b border-white/15 px-5 py-5">
             <Link
-              href="/dashboard"
+              href={homeHref}
               aria-label="Pelita Admin - Dashboard"
               onClick={() => setIsMobileMenuOpen(false)}
               className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -209,6 +235,3 @@ export default function Sidebar() {
     </>
   );
 }
-
-
-

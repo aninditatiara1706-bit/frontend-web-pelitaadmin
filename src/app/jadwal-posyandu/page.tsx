@@ -335,9 +335,11 @@ export default function JadwalPosyanduPage() {
                       type="button"
                       onClick={() => setSelectedDay(item.day)}
                       className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs transition-all cursor-pointer ${
-                        isSelected || hasSchedule
+                        isSelected
                           ? 'bg-[#7E3AF2] text-white font-bold shadow-xs'
-                          : 'text-gray-700 hover:bg-purple-50'
+                          : hasSchedule
+                            ? 'bg-transparent font-semibold text-[#7E3AF2] hover:bg-purple-50'
+                            : 'text-gray-700 hover:bg-purple-50'
                       }`}
                     >
                       {item.day}
