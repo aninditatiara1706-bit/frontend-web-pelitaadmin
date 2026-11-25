@@ -33,12 +33,25 @@ const statusTransitions: Record<
 function formatScheduleDate(value: string) {
   return new Intl.DateTimeFormat('id-ID', {
     dateStyle: 'long',
+    timeZone: 'Asia/Jakarta',
   }).format(new Date(value));
+}
+
+function getScheduleDateKey(value: string | Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+}
+
+function getTodayDateKey() {
+  return getScheduleDateKey(new Date());
 }
 
 export default function PendaftaranAntreanPage() {
   const [queues, setQueues] = useState<QueueRecord[]>([]);
-  const [, setParticipants] = useState<Participant[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,6 +60,7 @@ export default function PendaftaranAntreanPage() {
     useState<QueueRecord['status']>('MENUNGGU');
 
   const [newScheduleId, setNewScheduleId] = useState('');
+  const [todayKey, setTodayKey] = useState(getTodayDateKey);
 
   // FORM PESERTA BARU
   const [nik, setNik] = useState('');
@@ -79,50 +93,39 @@ export default function PendaftaranAntreanPage() {
     setErrorMessage('');
 
     try {
-      const [
-        queueResponse,
-        participantResponse,
-        scheduleResponse,
-      ] = await Promise.all([
+      const [queueResponse, scheduleResponse] = await Promise.all([
         apiRequest<QueueRecord[]>(
-          '/antrean?status=MENUNGGU,DIPERIKSA,SELESAI'
+          '/antrean?status=MENUNGGU,DIPERIKSA,SELESAI,BATAL'
         ),
-        apiRequest<Participant[]>('/peserta?page=1&limit=100'),
         apiRequest<Schedule[]>('/jadwal'),
       ]);
 
       setQueues(queueResponse.data);
-      setParticipants(participantResponse.data);
       setSchedules(scheduleResponse.data);
 
-      setNewScheduleId((current) => {
-        if (
-          current &&
-          scheduleResponse.data.some((item) => item.id === current)
-        ) {
-          return current;
-        }
+      const schedulesToday = scheduleResponse.data
+        .filter((item) => item.status !== 'SELESAI')
+        .filter((item) => getScheduleDateKey(item.tanggal) === getTodayDateKey())
+        .sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime());
 
-        return (
-          scheduleResponse.data.find(
-            (item) => item.status !== 'SELESAI'
-          )?.id || ''
-        );
-      });
+      const todayScheduleIds = new Set(schedulesToday.map((item) => item.id));
+      const todayQueues = queueResponse.data.filter((item) => todayScheduleIds.has(item.jadwalId));
+
+      setNewScheduleId(schedulesToday[0]?.id ?? '');
 
       setSelectedId((current) => {
         if (
           current &&
-          queueResponse.data.some((item) => item.id === current)
+          todayQueues.some((item) => item.id === current)
         ) {
           return current;
         }
 
         return (
-          queueResponse.data.find(
+          todayQueues.find(
             (item) => item.status === 'MENUNGGU'
           )?.id ||
-          queueResponse.data[0]?.id ||
+          todayQueues[0]?.id ||
           ''
         );
       });
@@ -139,7 +142,15 @@ export default function PendaftaranAntreanPage() {
 
   useEffect(() => {
     void loadData();
-  }, [loadData]);
+    const timer = window.setInterval(() => {
+      const currentToday = getTodayDateKey();
+      if (currentToday !== todayKey) {
+        setTodayKey(currentToday);
+      }
+      void loadData();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [loadData, todayKey]);
 
   // ==========================================
   // SIMPAN CACHE DETAIL HASIL PEMERIKSAAN
@@ -166,52 +177,46 @@ export default function PendaftaranAntreanPage() {
   };
 
   // ==========================================
-  // FILTER ANTREAN
+  // JADWAL HARI INI DAN ANTREAN
   // ==========================================
+
+  const todaySchedules = useMemo(() => {
+    return schedules
+      .filter((item) => item.status !== 'SELESAI')
+      .filter((item) => getScheduleDateKey(item.tanggal) === todayKey)
+      .sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime());
+  }, [schedules, todayKey]);
+
+  const activeSchedule = todaySchedules.find((item) => item.id === newScheduleId)
+    ?? todaySchedules[0];
+
+  const activeQueues = useMemo(() => {
+    if (!activeSchedule) return [];
+    return queues
+      .filter((item) => item.jadwalId === activeSchedule.id)
+      .sort((a, b) => a.noAntrean - b.noAntrean);
+  }, [queues, activeSchedule]);
 
   const filteredQueues = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase();
+    return activeQueues.filter((item) =>
+      !query ||
+      item.peserta.nama.toLocaleLowerCase().includes(query) ||
+      `a-${item.noAntrean}`.toLowerCase().includes(query) ||
+      String(item.noAntrean).includes(query)
+    );
+  }, [activeQueues, searchTerm]);
 
-    return queues.filter((item) => {
-      return (
-        item.jadwalId === newScheduleId &&
-        (!query ||
-          item.peserta.nama.toLocaleLowerCase().includes(query) ||
-          `a-${item.noAntrean}`.toLowerCase().includes(query) ||
-          String(item.noAntrean).includes(query))
-      );
-    });
-  }, [queues, searchTerm, newScheduleId]);
+  const antreanAktif = activeQueues.filter((item) => item.status !== 'BATAL');
+  const jumlahPeserta = antreanAktif.length;
+  const KUOTA = 30;
+  const sisaKuota = Math.max(0, KUOTA - jumlahPeserta);
 
-  // ==========================================
-  // DATA ANTREAN
-  // ==========================================
-
-  const activeQueues = queues.filter(
-    (item) => item.jadwalId === newScheduleId
-  );
-
-  const nextQueue = activeQueues.find(
-    (item) => item.status === 'MENUNGGU'
-  );
-
-  const calledQueues = activeQueues.filter(
-    (item) => item.status === 'DIPERIKSA'
-  );
-
+  const nextQueue = activeQueues.find((item) => item.status === 'MENUNGGU');
+  const calledQueues = activeQueues.filter((item) => item.status === 'DIPERIKSA');
   const currentQueue = calledQueues[0];
-
-  const selectedQueue = queues.find(
-    (item) => item.id === selectedId
-  );
-
-  const availableStatuses = selectedQueue
-    ? statusTransitions[selectedQueue.status]
-    : [];
-
-  const activeSchedule = schedules.find(
-    (item) => item.id === newScheduleId
-  );
+  const selectedQueue = activeQueues.find((item) => item.id === selectedId);
+  const availableStatuses = selectedQueue ? statusTransitions[selectedQueue.status] : [];
 
   // ==========================================
   // UPDATE STATUS
@@ -270,7 +275,7 @@ export default function PendaftaranAntreanPage() {
     event.preventDefault();
 
     if (!newScheduleId) {
-      setErrorMessage('Silakan pilih jadwal terlebih dahulu.');
+      setErrorMessage('Tidak ada jadwal Posyandu aktif hari ini.');
       return;
     }
 
@@ -284,6 +289,9 @@ export default function PendaftaranAntreanPage() {
     setNotice('');
 
     try {
+      if (!activeSchedule) throw new Error('Tidak ada jadwal aktif hari ini.');
+      if (jumlahPeserta >= KUOTA) throw new Error('Kuota jadwal hari ini sudah penuh (30 peserta).');
+
       const participantResponse = await apiRequest<Participant>(
         '/peserta',
         {
@@ -306,7 +314,7 @@ export default function PendaftaranAntreanPage() {
         method: 'POST',
         body: JSON.stringify({
           pesertaId: createdParticipant.id,
-          jadwalId: newScheduleId,
+          jadwalId: activeSchedule.id,
         }),
       });
 
@@ -359,7 +367,7 @@ export default function PendaftaranAntreanPage() {
             Jadwal:{' '}
             {activeSchedule
               ? `${formatScheduleDate(activeSchedule.tanggal)} - ${activeSchedule.lokasi}`
-              : 'Pilih jadwal untuk melihat antrean'}
+              : 'Tidak ada jadwal Posyandu hari ini'}
           </p>
         </div>
 
@@ -367,13 +375,43 @@ export default function PendaftaranAntreanPage() {
           type="button"
           onClick={() => {
             setErrorMessage('');
+            setNewScheduleId(activeSchedule?.id ?? '');
             setIsRegisterModalOpen(true);
           }}
-          className="rounded-md border border-[#A348CF] px-3 py-1.5 text-xs font-semibold text-[#9843C5] transition hover:bg-purple-50"
+          disabled={!activeSchedule || jumlahPeserta >= KUOTA}
+          className="rounded-md border border-[#A348CF] px-3 py-1.5 text-xs font-semibold text-[#9843C5] transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
           + Pendaftaran
         </button>
       </header>
+
+      {/* INFO JADWAL HARI INI + KUOTA */}
+      {activeSchedule && (
+        <section className="mb-4 rounded-xl border border-purple-100 bg-purple-50/60 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-purple-800">Jadwal Hari Ini</p>
+              <p className="mt-1 text-sm font-bold text-gray-900">{activeSchedule.lokasi}</p>
+              <p className="text-xs text-gray-600">{formatScheduleDate(activeSchedule.tanggal)}</p>
+            </div>
+            <div className="min-w-[220px] sm:max-w-xs sm:flex-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-purple-800">Kuota: {jumlahPeserta}/{KUOTA} peserta</span>
+                <span className="text-gray-500">{sisaKuota} tersisa</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#9144C5] to-[#CB55D5]" style={{ width: `${Math.min(100, (jumlahPeserta / KUOTA) * 100)}%` }} />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!isLoading && !activeSchedule && (
+        <section className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-5 text-center text-sm text-gray-600">
+          Tidak ada jadwal Posyandu hari ini. Jadwal hari sebelumnya sudah masuk riwayat.
+        </section>
+      )}
 
       {/* ALERT */}
       {errorMessage && (
@@ -581,7 +619,7 @@ export default function PendaftaranAntreanPage() {
                     colSpan={5}
                     className="py-7 text-center text-gray-500"
                   >
-                    Belum ada data antrean pada sistem.
+                    Belum ada peserta yang terdaftar untuk jadwal hari ini.
                   </td>
                 </tr>
               )}
@@ -772,29 +810,9 @@ export default function PendaftaranAntreanPage() {
                 />
               </label>
 
-              <label className="block text-xs font-semibold text-gray-700">
-                Jadwal Pelayanan
-                <select
-                  required
-                  value={newScheduleId}
-                  onChange={(event) =>
-                    setNewScheduleId(event.target.value)
-                  }
-                  className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-purple-500"
-                >
-                  <option value="" disabled>
-                    Pilih jadwal pelayanan
-                  </option>
-
-                  {schedules
-                    .filter((item) => item.status !== 'SELESAI')
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {formatScheduleDate(item.tanggal)} · {item.lokasi}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              <div className="rounded-lg bg-purple-50 p-3 text-xs text-purple-800">
+                Jadwal pendaftaran: <strong>{activeSchedule ? `${formatScheduleDate(activeSchedule.tanggal)} · ${activeSchedule.lokasi}` : 'Tidak ada jadwal hari ini'}</strong>
+              </div>
 
               <div className="flex justify-end gap-2 pt-3">
                 <button
@@ -811,7 +829,7 @@ export default function PendaftaranAntreanPage() {
 
                 <button
                   type="submit"
-                  disabled={isSaving || !newScheduleId}
+                  disabled={isSaving || !activeSchedule || jumlahPeserta >= KUOTA}
                   className="rounded-lg bg-gradient-to-r from-[#9144C5] to-[#CB55D5] px-5 py-2.5 text-xs font-bold text-white disabled:opacity-50"
                 >
                   {isSaving ? 'Menyimpan...' : 'Daftarkan Peserta'}
